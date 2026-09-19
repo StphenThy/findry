@@ -37,11 +37,11 @@ export function EmployerCandidates() {
       <div className="card p-space-md flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-space-md">
         <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-space-sm">
           <div className="relative flex-1">
-            <Icon name="smart_toy" size={20} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
+            <Icon name="search" size={20} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input className="field pl-11 pr-4 focus:ring-secondary/40" placeholder="Filter candidates by name, skill, company, city…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search candidates" />
           </div>
           <div className="relative sm:min-w-[280px]">
-            <select className="field appearance-none bg-surface-container font-label-prominent text-label-prominent focus:ring-secondary/40" value={jobId} onChange={(e) => setSp(e.target.value ? { jobId: e.target.value, ...(status ? { status } : {}) } : status ? { status } : {})}>
+            <select className="field font-label-prominent text-label-prominent focus:ring-secondary/40" value={jobId} onChange={(e) => setSp(e.target.value ? { jobId: e.target.value, ...(status ? { status } : {}) } : status ? { status } : {})}>
               <option value="">All roles</option>
               {(data?.jobs ?? []).map((j) => (
                 <option key={j.id} value={j.id}>
@@ -49,14 +49,13 @@ export function EmployerCandidates() {
                 </option>
               ))}
             </select>
-            <Icon name="expand_more" size={20} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant" />
           </div>
         </div>
         <div className="flex items-center gap-space-sm flex-wrap min-w-0">
-          <div className="flex items-center gap-1 bg-surface-container rounded-lg p-1 caption max-w-full overflow-x-auto" role="tablist" aria-label="Filter by status">
+          <div className="flex items-center gap-1 bg-surface-container rounded-lg p-1 caption max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Filter by status">
             {['', 'submitted', 'viewed', 'interview', 'offer', 'rejected'].map((s) => (
               <button key={s} type="button" role="tab" aria-selected={status === s} onClick={() => setSp(s ? { ...(jobId ? { jobId } : {}), status: s } : jobId ? { jobId } : {})} className={`px-space-sm py-space-xs rounded whitespace-nowrap ${status === s ? 'bg-surface-container-lowest shadow-sm font-semibold text-secondary' : 'hover:text-on-surface'}`}>
-                {s ? statusLabel[s] : 'All'}
+                {s ? (s === 'viewed' ? 'Viewed' : s === 'rejected' ? 'Not selected' : statusLabel[s]) : 'All'}
               </button>
             ))}
           </div>

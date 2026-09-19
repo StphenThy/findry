@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { toast as toastBus } from '../lib/hooks';
@@ -77,9 +77,11 @@ export function FindryWordmark({ className = '' }: { className?: string }) {
 
 export function Logo({ size = 'md', to = '/' }: { size?: 'sm' | 'md' | 'lg'; to?: string }) {
   const px = size === 'lg' ? 40 : size === 'sm' ? 26 : 32;
+  // Unique per instance: two Logos on one page (hidden sidebar + mobile header) must not share SVG mask ids.
+  const uid = 'logo' + useId().replace(/[^a-zA-Z0-9]/g, '');
   return (
     <Link to={to} className="flex items-center gap-space-xs shrink-0" aria-label="Findry home">
-      <FindryMark size={px} uid={`logo-${size}`} />
+      <FindryMark size={px} uid={uid} />
       <FindryWordmark className={size === 'lg' ? 'text-headline-md' : 'text-headline-sm'} />
     </Link>
   );
