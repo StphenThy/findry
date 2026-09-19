@@ -28,3 +28,21 @@ services:
         value: "true"
       - key: SERVE_CLIENT
         value: "false"
+      # Gemini budget — keep under your API key's free-tier limits (see server/.env.example)
+      - key: AI_DAILY_CALL_LIMIT
+        value: "200"
+      - key: AI_PER_MINUTE_LIMIT
+        value: "8"
+      - key: AI_COOLDOWN_MINUTES
+        value: "15"
+      # Password-reset email. Leave empty to print reset links to the Render logs instead.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        value: Findry <no-reply@findry.app>

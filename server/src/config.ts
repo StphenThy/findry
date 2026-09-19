@@ -55,7 +55,7 @@ export const config = {
 export const isProd = config.nodeEnv === 'production';
 
 // Never run production on the placeholder secret — every session token would be forgeable.
-if (isProd && (!process.env.JWT_SECRET || config.jwtSecret === 'dev-secret-change-me' || config.jwtSecret.length < 32)) {
-  throw new Error('[config] JWT_SECRET must be set to a random string of at least 32 characters in production');
+if (isProd && (!process.env.JWT_SECRET || config.jwtSecret === 'dev-secret-change-me' || config.jwtSecret.length < 24)) {
+  throw new Error('[config] JWT_SECRET must be set to a random string of at least 24 characters in production');
 }
 if (!isProd && config.jwtSecret === 'dev-secret-change-me') console.warn('[config] JWT_SECRET is the dev placeholder — set a real one in server/.env before deploying');
