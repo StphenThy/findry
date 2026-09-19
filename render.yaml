@@ -1,0 +1,30 @@
+# Render Blueprint — deploys the Express API as a free web service.
+# Dashboard → New → Blueprint → pick this repo. Fill in the env vars marked sync:false.
+services:
+  - type: web
+    name: findry-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false # paste your Atlas connection string
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        sync: false # your Vercel URL, e.g. https://findry.vercel.app
+      - key: AI_PROVIDER
+        value: auto
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      - key: SEED_ON_START
+        value: "true"
+      - key: SERVE_CLIENT
+        value: "false"
