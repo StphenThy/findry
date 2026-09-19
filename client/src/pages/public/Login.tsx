@@ -82,24 +82,24 @@ export function Login() {
   const accent = role === 'employer' ? 'secondary' : 'primary';
 
   return (
-    <div ref={page} className="min-h-screen grid lg:grid-cols-[1.05fr_1fr] bg-surface">
+    <div ref={page} className="min-h-screen grid lg:grid-cols-2 bg-surface">
       {/* ── Left: brand + animated scene ─────────────────────────────── */}
       <LoginAside role={role} aside={copy?.aside} />
 
       {/* ── Right: role picker + form ────────────────────────────────── */}
       <main className="flex flex-col">
-        <div className="lg:hidden px-margin-sm h-16 flex items-center">
-          <Logo />
+        <div className="px-margin-sm md:px-margin lg:px-margin-lg h-16 lg:h-20 flex items-center justify-between">
+          <div className="lg:hidden">
+            <Logo />
+          </div>
+          <Link to="/" className="btn-outline h-10 px-space-md lg:ml-auto">
+            <Icon name="arrow_back" size={18} /> Back to home
+          </Link>
         </div>
-        <div className="flex-1 flex items-center justify-center px-margin-sm md:px-margin py-space-lg">
-          <div className="w-full max-w-md">
-            <div className="hidden lg:flex justify-end mb-space-lg">
-              <Link to="/" className="caption flex items-center gap-1 hover:text-primary">
-                <Icon name="arrow_back" size={14} /> Back to Findry
-              </Link>
-            </div>
+        <div className="flex-1 flex items-center justify-center px-margin-sm md:px-margin lg:px-margin-lg pb-space-xl">
+          <div className="w-full max-w-xl">
             <div className="lg-copy">
-              <h1 className="font-headline-md text-headline-md md:text-headline-lg md:font-headline-lg text-on-surface tracking-tight">
+              <h1 className="font-headline-lg text-headline-lg-mobile md:text-headline-lg xl:text-[40px] xl:leading-[48px] text-on-surface tracking-tight">
                 {copy ? copy.title : 'Welcome back'}
               </h1>
               <p className="font-body-sm text-body-sm md:text-body-md text-on-surface-variant mt-1">
@@ -212,7 +212,7 @@ function LoginAside({ role, aside }: { role: Role | null; aside?: string }) {
   const bg = role === 'employer' ? 'from-secondary-container/50 via-surface-container-low to-surface' : role === 'seeker' ? 'from-primary-fixed via-surface-container-low to-surface' : 'from-surface-container-high via-surface-container-low to-surface';
 
   return (
-    <aside ref={ref} className={`hidden lg:flex flex-col relative overflow-hidden bg-gradient-to-br ${bg} transition-colors duration-500 px-margin-lg py-space-lg`}>
+    <aside ref={ref} className={`hidden lg:flex flex-col relative overflow-hidden bg-gradient-to-br ${bg} transition-colors duration-500 px-margin-lg xl:px-16 py-space-lg`}>
       <div className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-primary/10 blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 -right-16 w-[380px] h-[380px] rounded-full bg-secondary/10 blur-3xl pointer-events-none" />
       <Link to="/" className="relative flex items-center gap-space-sm w-fit" aria-label="Findry home">
@@ -224,7 +224,7 @@ function LoginAside({ role, aside }: { role: Role | null; aside?: string }) {
       </Link>
 
       <div className="relative flex-1 flex flex-col justify-center py-space-lg">
-        <div className="relative w-full max-w-[520px] mx-auto aspect-[52/40]">
+        <div className="relative w-full max-w-[760px] mx-auto aspect-[52/40]">
           <div data-scene="chooser" className="absolute inset-0">
             <ChooserScene />
           </div>
@@ -237,7 +237,26 @@ function LoginAside({ role, aside }: { role: Role | null; aside?: string }) {
         </div>
       </div>
 
-      <p className="lg-copy relative font-body-md text-body-md md:text-body-lg text-on-surface-variant max-w-md">{aside ?? 'One account holds a seeker profile and an employer workspace — pick the side you are signing in to.'}</p>
+      <div className="relative">
+        <p className="lg-copy font-body-md text-body-md md:text-body-lg text-on-surface-variant max-w-lg">{aside ?? 'Job seeker and employer accounts are separate — pick the side you are signing in to.'}</p>
+        <ul className="mt-space-md grid grid-cols-1 xl:grid-cols-3 gap-space-sm max-w-2xl">
+          {[
+            ['psychology', 'Explainable match score', 'Skills 45 · experience 30 · education 25 — the breakdown is always one tap away.'],
+            ['payments', 'Salaries in ₱, up front', 'Every post shows its monthly range and benefits before you apply.'],
+            ['verified_user', 'Verified PH employers', 'Companies are checked before their posts go live.'],
+          ].map(([icon, title, body]) => (
+            <li key={title} className="rounded-xl bg-surface-container-lowest/70 border border-outline-variant/30 p-space-sm flex gap-space-sm">
+              <span className="w-9 h-9 rounded-lg bg-primary-fixed text-primary flex items-center justify-center shrink-0">
+                <Icon name={icon} size={20} />
+              </span>
+              <span>
+                <span className="font-label-prominent text-label-prominent text-on-surface block">{title}</span>
+                <span className="caption block mt-0.5">{body}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </aside>
   );
 }
