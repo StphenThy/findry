@@ -28,7 +28,7 @@ https://aistudio.google.com → **Get API key** → create. No card required. If
 ## 3. Render — the API
 
 1. https://render.com → **New +** → **Blueprint** → connect the GitHub repo. Render reads `render.yaml`.
-   (Or **New + → Web Service** manually: Root Directory `server`, Build `npm install && npm run build`, Start `npm start`, Health check `/api/health`.)
+   (Or **New + → Web Service** manually: Root Directory `server`, Build `npm install --include=dev && npm run build`, Start `npm start`, Health check `/api/health`.)
 2. Fill in the environment variables it asks for:
 
    | Key              | Value                                              |
@@ -56,7 +56,7 @@ Every `git push` to `main` redeploys both.
 
 Have Express serve the built client — simpler for a demo, but the frontend also suffers the cold start.
 
-- Render Web Service with **Root Directory** = repo root, Build `npm install && npm run build`, Start `npm start`.
+- Render Web Service with **Root Directory** = repo root, Build `npm install --include=dev && npm run build`, Start `npm start`.
 - Env: `SERVE_CLIENT=true`, `CLIENT_URL=https://<your-render-url>`, plus the DB/AI vars above.
 - Skip Vercel entirely.
 
@@ -72,6 +72,7 @@ SERVE_CLIENT=true npm start        # PowerShell: $env:SERVE_CLIENT='true'; npm s
 
 | Symptom                                   | Fix                                                                           |
 | ----------------------------------------- | ----------------------------------------------------------------------------- |
+| Build fails with `tsc: not found`          | `NODE_ENV=production` makes npm skip devDependencies — the build command must be `npm install --include=dev && npm run build`. |
 | `Origin … not allowed by CORS`            | Add the exact client origin (scheme + host, no path) to `CLIENT_URL` on Render. |
 | `MongoServerSelectionError` on Render     | Atlas Network Access must include `0.0.0.0/0`; check the URI password.         |
 | Login works locally, 401 on Vercel        | `VITE_API_URL` missing/incorrect — it's a **build-time** var, redeploy after changing. |

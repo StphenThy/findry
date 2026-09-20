@@ -6,7 +6,8 @@ services:
     runtime: node
     plan: free
     rootDir: server
-    buildCommand: npm install && npm run build
+    # --include=dev: NODE_ENV=production makes npm skip devDependencies, but tsc lives there
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
