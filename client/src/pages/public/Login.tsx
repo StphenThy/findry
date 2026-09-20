@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { animate, createTimeline, stagger, svg, utils } from 'animejs';
 import { FindryMark, FindryWordmark, Icon, Logo, PasswordField } from '../../components/ui';
 import { TB, TB_LEFT, useAnime } from '../../lib/anime';
+import { ApiError } from '../../lib/api';
 import { homeFor, useAuth } from '../../lib/auth';
 import type { Role } from '../../lib/types';
 
@@ -71,6 +72,11 @@ export function Login() {
       const r = await login(email, password, role);
       navigate(homeFor(r.user, r.profiles, role));
     } catch (e2) {
+      if (e2 instanceof ApiError && e2.code === 'EMAIL_UNVERIFIED') {
+        const p = e2.payload as { email?: string; role?: Role; devCode?: string };
+        navigate(`/verify-email?email=${encodeURIComponent(p.email ?? email)}&role=${p.role ?? role}`, { state: { devCode: p.devCode } });
+        return;
+      }
       // Includes the server's ROLE_MISMATCH message ("registered as a Job Seeker account…").
       setErr((e2 as Error).message);
     } finally {

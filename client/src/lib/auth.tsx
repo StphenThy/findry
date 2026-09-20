@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import { ApiError, api, tokenStore } from './api';
 import { toast } from './hooks';
-import type { AuthResponse, ProfileStatus, Role, User } from './types';
+import type { AuthResponse, ProfileStatus, Role, SignupResponse, User } from './types';
 
 interface AuthState {
   user: User | null;
@@ -11,7 +11,9 @@ interface AuthState {
   activeRole: Role | null;
   loading: boolean;
   login: (email: string, password: string, role: Role) => Promise<AuthResponse>;
-  signup: (body: { name: string; email: string; password: string; role: Role; companyName?: string; industry?: string }) => Promise<AuthResponse>;
+  signup: (body: { name: string; email: string; password: string; role: Role; companyName?: string; industry?: string }) => Promise<SignupResponse>;
+  /** Enter the 6-digit code emailed at signup; signs the account in on success. */
+  verifyEmail: (email: string, code: string, role: Role) => Promise<AuthResponse>;
   logout: () => void;
   refresh: () => Promise<void>;
   /** Edit the account itself (name / email). */
@@ -92,8 +94,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return r;
       },
       signup: async (body) => {
-        const r = apply(await api.post<AuthResponse>('/auth/signup', body));
-        setActiveRole(body.role);
+        const r = await api.post<SignupResponse>('/auth/signup', body);
+        if (!r.verificationRequired) {
+          apply(r);
+          setActiveRole(body.role);
+        }
+        return r;
+      },
+      verifyEmail: async (email, code, role) => {
+        const r = apply(await api.post<AuthResponse>('/auth/verify-email', { email, code }));
+        setActiveRole(role);
         return r;
       },
       logout: () => {

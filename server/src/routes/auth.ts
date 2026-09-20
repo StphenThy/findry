@@ -61,6 +61,38 @@ function publicUser(user: IUser) {
 const roleLabel = (r: string) => (r === 'seeker' ? 'Job Seeker' : 'Employer');
 const aRole = (r: string) => (r === 'seeker' ? 'a Job Seeker' : 'an Employer');
 
+/* ── Email verification (6-digit code at signup) ─────────────────────── */
+
+/**
+ * Verification needs a way to deliver the code: real mail in production, or
+ * the code echoed back to the screen in development. Production without SMTP
+ * skips it (accounts are created verified) rather than locking everyone out.
+ */
+const verificationRequired = mailConfigured || !isProd;
+const VERIFY_CODE_TTL_MS = 15 * 60 * 1000;
+const VERIFY_MAX_ATTEMPTS = 5;
+
+/** Store a fresh code on the user and email it. Returns the code only for dev echo. */
+async function issueVerificationCode(user: IUser): Promise<string | undefined> {
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+  user.verifyCodeHash = sha256(code);
+  user.verifyCodeExpires = new Date(Date.now() + VERIFY_CODE_TTL_MS);
+  user.verifyAttempts = 0;
+  await user.save();
+  await sendMail(
+    user.email,
+    `${code} is your Findry verification code`,
+    `Hi ${user.name},\n\nYour Findry verification code is:\n\n${code}\n\nEnter it on the sign-up screen within 15 minutes. If you didn't create a Findry account, you can ignore this email.`,
+    `<p>Hi ${escapeHtml(user.name)},</p><p>Your Findry verification code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>Enter it on the sign-up screen within 15 minutes. If you didn't create a Findry account, you can ignore this email.</p>`,
+  );
+  return !mailConfigured && !isProd ? code : undefined;
+}
+
+/** Signed-in payload once an account is usable. */
+async function sessionResponse(user: IUser) {
+  return { token: signToken(user._id, user.tokenVersion), user: publicUser(user), profiles: await profileStatus(user._id) };
+}
+
 /**
  * POST /api/auth/signup
  * One email = one account = one role. If the email already exists we return
@@ -91,6 +123,7 @@ authRouter.post(
       passwordHash,
       roles: [body.role],
       lastRole: body.role,
+      emailVerified: !verificationRequired,
     });
     if (body.role === 'seeker') await SeekerProfile.create({ userId: user._id });
     else
@@ -100,11 +133,61 @@ authRouter.post(
         industry: body.industry ?? '',
       });
 
-    res.status(201).json({
-      token: signToken(user._id, user.tokenVersion),
-      user: publicUser(user),
-      profiles: await profileStatus(user._id),
-    });
+    if (verificationRequired) {
+      const devCode = await issueVerificationCode(user);
+      return res.status(201).json({ verificationRequired: true, email: user.email, role: body.role, ...(devCode ? { devCode } : {}) });
+    }
+    res.status(201).json({ verificationRequired: false, ...(await sessionResponse(user)) });
+  }),
+);
+
+/**
+ * POST /api/auth/verify-email { email, code }
+ * Turns a freshly signed-up account into a usable one and signs it in.
+ */
+authRouter.post(
+  '/verify-email',
+  authLimiter,
+  wrap(async (req, res) => {
+    const { email, code } = z.object({ email: z.string().trim().email(), code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code') }).parse(req.body);
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ error: 'That code is not valid. Request a new one.', code: 'VERIFY_INVALID' });
+    // Never mint a session from this route for an account that has no pending code.
+    if (user.emailVerified !== false) return res.status(400).json({ error: 'This account is already verified — please sign in.', code: 'ALREADY_VERIFIED' });
+    if (!user.verifyCodeHash || !user.verifyCodeExpires || user.verifyCodeExpires < new Date()) {
+      return res.status(400).json({ error: 'This code has expired. Request a new one.', code: 'VERIFY_EXPIRED' });
+    }
+    if ((user.verifyAttempts ?? 0) >= VERIFY_MAX_ATTEMPTS) {
+      return res.status(400).json({ error: 'Too many wrong codes. Request a new one.', code: 'VERIFY_EXPIRED' });
+    }
+    if (sha256(code) !== user.verifyCodeHash) {
+      user.verifyAttempts = (user.verifyAttempts ?? 0) + 1;
+      await user.save();
+      const left = VERIFY_MAX_ATTEMPTS - user.verifyAttempts;
+      return res.status(400).json({ error: left > 0 ? `Incorrect code. ${left} attempt${left === 1 ? '' : 's'} left.` : 'Too many wrong codes. Request a new one.', code: left > 0 ? 'VERIFY_INVALID' : 'VERIFY_EXPIRED' });
+    }
+    user.emailVerified = true;
+    user.verifyCodeHash = undefined;
+    user.verifyCodeExpires = undefined;
+    user.verifyAttempts = 0;
+    await user.save();
+    res.json(await sessionResponse(user));
+  }),
+);
+
+/**
+ * POST /api/auth/resend-code { email }
+ * Always 200 (no account enumeration). Only unverified accounts get a new code.
+ */
+authRouter.post(
+  '/resend-code',
+  resetLimiter,
+  wrap(async (req, res) => {
+    const { email } = z.object({ email: z.string().trim().email() }).parse(req.body);
+    const user = await User.findOne({ email });
+    let devCode: string | undefined;
+    if (user && user.emailVerified === false) devCode = await issueVerificationCode(user);
+    res.json({ ok: true, ...(devCode ? { devCode } : {}) });
   }),
 );
 
@@ -144,6 +227,13 @@ authRouter.post(
       user.failedLogins = 0;
       user.lockUntil = undefined;
     }
+    // Signed up but never entered the code: re-issue one (if the old one lapsed) and ask for it.
+    if (user.emailVerified === false) {
+      if (user.failedLogins !== undefined) await user.save();
+      const fresh = !user.verifyCodeExpires || user.verifyCodeExpires < new Date();
+      const devCode = fresh ? await issueVerificationCode(user) : undefined;
+      return res.status(403).json({ error: 'Please verify your email first — enter the code we sent you.', code: 'EMAIL_UNVERIFIED', email: user.email, role: user.roles[0], ...(devCode ? { devCode } : {}) });
+    }
     // Role lock: a Job Seeker account cannot open the Employer portal and vice versa.
     if (body.role && !user.roles.includes(body.role)) {
       return res.status(403).json({
@@ -155,7 +245,7 @@ authRouter.post(
     }
     if (body.role) user.lastRole = body.role;
     if (user.isModified()) await user.save();
-    res.json({ token: signToken(user._id, user.tokenVersion), user: publicUser(user), profiles: await profileStatus(user._id) });
+    res.json(await sessionResponse(user));
   }),
 );
 
@@ -211,6 +301,7 @@ authRouter.post(
     user.failedLogins = 0;
     user.lockUntil = undefined;
     user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    user.emailVerified = true; // they clicked a link we emailed — the address is proven
     await user.save();
     res.json({ ok: true, role: user.roles[0] });
   }),

@@ -23,6 +23,11 @@ export interface AuthResponse {
   profiles: ProfileStatus;
 }
 
+/** Signup either signs the user in straight away or parks them on the email-code screen. */
+export type SignupResponse =
+  | ({ verificationRequired: false } & AuthResponse)
+  | { verificationRequired: true; email: string; role: Role; devCode?: string };
+
 export interface ExperienceEntry {
   company: string;
   title: string;

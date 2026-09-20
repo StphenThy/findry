@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon, Logo, PasswordField, PasswordHints, passwordOk } from '../../components/ui';
 import { ApiError, api } from '../../lib/api';
 import { homeFor, useAuth } from '../../lib/auth';
@@ -82,8 +82,9 @@ export function Signup() {
     setErr(null);
     setExists(null);
     try {
-      await signup({ name: form.name, email: form.email, password: form.password, role, companyName: role === 'employer' ? form.companyName : undefined, industry: role === 'employer' ? form.industry : undefined });
-      navigate(`/${role}/onboarding`);
+      const r = await signup({ name: form.name, email: form.email, password: form.password, role, companyName: role === 'employer' ? form.companyName : undefined, industry: role === 'employer' ? form.industry : undefined });
+      if (r.verificationRequired) navigate(`/verify-email?email=${encodeURIComponent(r.email)}&role=${role}`, { state: { devCode: r.devCode } });
+      else navigate(`/${role}/onboarding`);
     } catch (e2) {
       if (e2 instanceof ApiError && e2.code === 'ACCOUNT_EXISTS') setExists({ existingRoles: (e2.payload.existingRoles as Role[]) ?? [], hint: e2.payload.hint as string });
       else setErr((e2 as Error).message);
@@ -180,6 +181,112 @@ export function Signup() {
       <p className="caption mt-space-sm text-center text-outline flex items-center justify-center gap-1">
         <Icon name="verified_user" size={14} className="text-secondary" /> Data Privacy Act (RA 10173) compliant — your resume is never sold.
       </p>
+    </Shell>
+  );
+}
+
+/* ── Verify email (6-digit code sent at signup) ────────────────────────── */
+export function VerifyEmail() {
+  const { verifyEmail } = useAuth();
+  const navigate = useNavigate();
+  const [sp] = useSearchParams();
+  const email = sp.get('email') ?? '';
+  const role: Role = sp.get('role') === 'employer' ? 'employer' : 'seeker';
+  const state = (useLocation().state ?? {}) as { devCode?: string };
+  const [code, setCode] = useState('');
+  const [devCode, setDevCode] = useState<string | undefined>(state.devCode);
+  const [busy, setBusy] = useState(false);
+  const [resent, setResent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await verifyEmail(email, code, role);
+      toast.success('Email verified — welcome to Findry');
+      navigate(`/${role}/onboarding`);
+    } catch (e2) {
+      setErr((e2 as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resend = async () => {
+    setErr(null);
+    setResent(false);
+    try {
+      const r = await api.post<{ ok: true; devCode?: string }>('/auth/resend-code', { email });
+      setDevCode(r.devCode);
+      setCode('');
+      setResent(true);
+    } catch (e2) {
+      setErr((e2 as Error).message);
+    }
+  };
+
+  if (!email) return <Navigate to="/signup" replace />;
+
+  return (
+    <Shell role={role} title="Check your email" sub={`We sent a 6-digit code to ${email}. Enter it below to activate your account.`}>
+      <form onSubmit={submit} className="flex flex-col gap-space-md">
+        <div>
+          <label className="label" htmlFor="code">
+            Verification code
+          </label>
+          <input
+            id="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            required
+            autoFocus
+            className="field text-center text-[24px] tracking-[0.5em] font-semibold"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="••••••"
+          />
+          <p className="caption mt-1">The code expires in 15 minutes. Check your spam folder if it hasn't arrived.</p>
+        </div>
+        {devCode && (
+          <div className="rounded-lg bg-surface-container p-space-md">
+            <p className="kicker text-on-surface-variant mb-1">Development mode — email isn't configured, so here's the code:</p>
+            <button type="button" onClick={() => setCode(devCode)} className="font-headline-sm text-headline-sm text-primary tracking-[0.3em]">
+              {devCode}
+            </button>
+          </div>
+        )}
+        {resent && (
+          <p className="caption text-secondary flex items-center gap-1" role="status">
+            <Icon name="mark_email_read" size={14} /> A new code is on its way.
+          </p>
+        )}
+        {err && (
+          <p className="caption text-error flex items-center gap-1" role="alert">
+            <Icon name="error" size={14} /> {err}
+          </p>
+        )}
+        <button type="submit" disabled={busy || code.length !== 6} className={`${role === 'employer' ? 'btn-secondary' : 'btn-primary'} h-11 w-full`}>
+          {busy ? 'Verifying…' : 'Verify & continue'}
+        </button>
+      </form>
+      <div className="caption mt-space-md text-center flex flex-col gap-1">
+        <span>
+          Didn't get it?{' '}
+          <button type="button" onClick={resend} className="text-primary font-semibold hover:underline">
+            Resend code
+          </button>
+        </span>
+        <span>
+          Wrong address?{' '}
+          <Link to={`/signup?role=${role}`} className="text-primary font-semibold hover:underline">
+            Sign up again
+          </Link>
+        </span>
+      </div>
     </Shell>
   );
 }

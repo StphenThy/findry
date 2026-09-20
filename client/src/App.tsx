@@ -7,7 +7,7 @@ import { SeekerLayout } from './layouts/SeekerLayout';
 import { AuthProvider, useAuth } from './lib/auth';
 import type { Role } from './lib/types';
 import { Messages } from './pages/Messages';
-import { ForgotPassword, ResetPassword, Signup } from './pages/public/Auth';
+import { ForgotPassword, ResetPassword, Signup, VerifyEmail } from './pages/public/Auth';
 import { AccountSettings } from './pages/Account';
 import { Login } from './pages/public/Login';
 import { Landing } from './pages/public/Landing';
@@ -75,6 +75,7 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />

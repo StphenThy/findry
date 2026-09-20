@@ -18,6 +18,12 @@ export interface IUser extends Document<Types.ObjectId> {
   /** sha256 of the one-time password-reset token, and when it stops being valid. */
   resetTokenHash?: string;
   resetTokenExpires?: Date;
+  /** false = signed up but has not entered the emailed code yet. Missing (older accounts) counts as verified. */
+  emailVerified?: boolean;
+  /** sha256 of the 6-digit verification code, its expiry, and how many wrong guesses it has taken. */
+  verifyCodeHash?: string;
+  verifyCodeExpires?: Date;
+  verifyAttempts?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +41,10 @@ const UserSchema = new Schema<IUser>(
     lockUntil: Date,
     resetTokenHash: String,
     resetTokenExpires: Date,
+    emailVerified: Boolean,
+    verifyCodeHash: String,
+    verifyCodeExpires: Date,
+    verifyAttempts: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
@@ -48,6 +58,9 @@ UserSchema.set('toJSON', {
     delete ret.failedLogins;
     delete ret.lockUntil;
     delete ret.tokenVersion;
+    delete ret.verifyCodeHash;
+    delete ret.verifyCodeExpires;
+    delete ret.verifyAttempts;
     delete ret.__v;
     return ret;
   },
