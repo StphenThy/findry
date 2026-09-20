@@ -33,16 +33,36 @@ export const tokenStore = {
   setRole: (r: 'seeker' | 'employer') => sessionStorage.setItem(ROLE_KEY, r),
 };
 
+/** Fires once per page load when a request is still pending after this long (Render free tier cold start ≈ 30-60 s). */
+const SLOW_AFTER_MS = 6000;
+let slowHintShown = false;
+let onSlowRequest: (() => void) | null = null;
+export const setSlowRequestHandler = (fn: () => void) => {
+  onSlowRequest = fn;
+};
+
 async function request<T>(method: string, path: string, body?: unknown, isForm = false): Promise<T> {
   const headers: Record<string, string> = {};
+  const slowTimer = setTimeout(() => {
+    if (slowHintShown) return;
+    slowHintShown = true;
+    onSlowRequest?.();
+  }, SLOW_AFTER_MS);
   const token = tokenStore.get();
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined && !isForm) headers['content-type'] = 'application/json';
-  const res = await fetch(`${BASE}/api${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
+    });
+  } catch {
+    clearTimeout(slowTimer);
+    throw new ApiError(0, { error: 'Network error — check your connection and try again.', code: 'NETWORK' });
+  }
+  clearTimeout(slowTimer);
   const text = await res.text();
   let data: Record<string, unknown> = {};
   try {
@@ -50,7 +70,11 @@ async function request<T>(method: string, path: string, body?: unknown, isForm =
   } catch {
     data = { error: text };
   }
-  if (!res.ok) throw new ApiError(res.status, data);
+  if (!res.ok) {
+    if (res.status === 429 && !data.error) data = { error: 'Too many requests — please wait a moment and try again.', code: 'RATE_LIMITED' };
+    if (res.status >= 500 && !data.error) data = { error: 'The server hit a problem. Please try again in a moment.' };
+    throw new ApiError(res.status, data);
+  }
   return data as T;
 }
 

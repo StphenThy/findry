@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { Types } from 'mongoose';
 import { z } from 'zod';
 import { requireAuth, requireRole, wrap } from '../middleware/auth';
+import { requireObjectId } from '../middleware/objectId';
 import { suggestSkillsLimiter } from '../middleware/security';
 import { Application, Job, SeekerProfile } from '../models';
 import { getAI } from '../services/ai';
@@ -72,6 +72,7 @@ const jobSchema = z.object({
   autoScreenMinYears: z.boolean().default(false),
   status: z.enum(['draft', 'active', 'closed']).default('active'),
 });
+const salaryOrderOk = (b: { salaryMin?: number; salaryMax?: number }) => b.salaryMin === undefined || b.salaryMax === undefined || b.salaryMax === 0 || b.salaryMax >= b.salaryMin;
 
 employerRouter.get(
   '/jobs',
@@ -99,6 +100,7 @@ employerRouter.post(
   '/jobs',
   wrap(async (req, res) => {
     const body = jobSchema.parse(req.body);
+    if (!salaryOrderOk(body)) return res.status(400).json({ error: 'Maximum salary must be at least the minimum salary.' });
     const job = await Job.create({
       ...body,
       requiredSkills: normalizeSkills(body.requiredSkills),
@@ -111,6 +113,7 @@ employerRouter.post(
 
 employerRouter.get(
   '/jobs/:id',
+  requireObjectId('id'),
   wrap(async (req, res) => {
     const job = await Job.findOne({ _id: req.params.id, employerId: req.employer!._id });
     if (!job) return res.status(404).json({ error: 'Job not found' });
@@ -120,10 +123,12 @@ employerRouter.get(
 
 employerRouter.put(
   '/jobs/:id',
+  requireObjectId('id'),
   wrap(async (req, res) => {
     const body = jobSchema.partial().parse(req.body);
     const job = await Job.findOne({ _id: req.params.id, employerId: req.employer!._id });
     if (!job) return res.status(404).json({ error: 'Job not found' });
+    if (!salaryOrderOk({ salaryMin: body.salaryMin ?? job.salaryMin, salaryMax: body.salaryMax ?? job.salaryMax })) return res.status(400).json({ error: 'Maximum salary must be at least the minimum salary.' });
     if (body.requiredSkills) body.requiredSkills = normalizeSkills(body.requiredSkills);
     if (body.preferredSkills) body.preferredSkills = normalizeSkills(body.preferredSkills);
     Object.assign(job, body);
@@ -134,6 +139,7 @@ employerRouter.put(
 
 employerRouter.delete(
   '/jobs/:id',
+  requireObjectId('id'),
   wrap(async (req, res) => {
     const job = await Job.findOneAndDelete({ _id: req.params.id, employerId: req.employer!._id });
     if (!job) return res.status(404).json({ error: 'Job not found' });
@@ -276,4 +282,3 @@ employerRouter.get(
   }),
 );
 
-export const isObjectId = (id: string) => Types.ObjectId.isValid(id);

@@ -95,12 +95,12 @@ export function Footer() {
           <span className="caption">© {new Date().getFullYear()} Findry. Built for the Philippine tech job market.</span>
         </div>
         <div className="flex items-center gap-space-md text-on-surface-variant">
-          <a className="font-body-sm text-body-sm hover:text-on-surface transition-colors" href="#privacy">
-            Data Privacy Act (RA 10173)
-          </a>
-          <a className="font-body-sm text-body-sm hover:text-on-surface transition-colors" href="#terms">
+          <Link className="font-body-sm text-body-sm hover:text-on-surface transition-colors" to="/privacy">
+            Privacy Policy (RA 10173)
+          </Link>
+          <Link className="font-body-sm text-body-sm hover:text-on-surface transition-colors" to="/terms">
             Terms of Service
-          </a>
+          </Link>
         </div>
       </div>
     </footer>

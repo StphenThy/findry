@@ -15,10 +15,15 @@ export const securityHeaders = helmet({
 
 const tooMany = (what: string) => ({ error: `Too many ${what}. Please wait a few minutes and try again.`, code: 'RATE_LIMITED' });
 
-/** Whole-API ceiling per IP — generous enough for normal browsing, low enough to blunt scraping. */
+/**
+ * Whole-API ceiling per IP — generous enough for normal browsing (the Messages
+ * page polls every 8-15 s, and a whole office can sit behind one IP), low
+ * enough to blunt scraping. Health checks from the host never count.
+ */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 600,
+  limit: 1500,
+  skip: (req) => req.path === '/health',
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: tooMany('requests'),
@@ -43,8 +48,12 @@ export const resetLimiter = rateLimit({
   message: tooMany('password reset requests'),
 });
 
-/** Account lockout after repeated failed logins (see routes/auth). */
-export const LOCKOUT = { maxFailures: 5, minutes: 15 };
+/**
+ * Account lockout after repeated failed logins (see routes/auth). Kept short:
+ * anyone who knows an email can trigger it, so a long lock is a denial of service
+ * against the real owner. The per-IP authLimiter does the heavy lifting.
+ */
+export const LOCKOUT = { maxFailures: 5, minutes: 5 };
 
 /* ── Per-user limits on AI-backed endpoints ─────────────────────────────── */
 const perUser = (limit: number, windowMs: number, what: string) =>

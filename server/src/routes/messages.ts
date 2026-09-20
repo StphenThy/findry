@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { z } from 'zod';
 import { requireAuth, wrap } from '../middleware/auth';
 import { Application, EmployerProfile, Job, Message, SeekerProfile, User } from '../models';
+import { hiddenFromEmployer } from './helpers';
 
 export const messagesRouter = Router();
 messagesRouter.use(requireAuth);
@@ -17,6 +18,8 @@ async function parties(applicationId: string, callerUserId: string) {
   const seekerUser = String(s.userId);
   const employerUser = String(e.userId);
   if (callerUserId !== seekerUser && callerUserId !== employerUser) return null;
+  // Ghost mode: the employer side of a hidden conversation does not exist.
+  if (callerUserId === employerUser && callerUserId !== seekerUser && hiddenFromEmployer(s, e)) return null;
   return { app: a, seeker: s, employer: e, seekerUser, employerUser, other: callerUserId === seekerUser ? employerUser : seekerUser };
 }
 
@@ -42,7 +45,8 @@ messagesRouter.get(
     }
     const out = [];
     for (const a of apps) {
-      const [job, s, e] = await Promise.all([Job.findById(a.jobId).select('title'), SeekerProfile.findById(a.seekerId).select('userId headline'), EmployerProfile.findById(a.employerId).select('companyName monogram userId')]);
+      const [job, s, e] = await Promise.all([Job.findById(a.jobId).select('title'), SeekerProfile.findById(a.seekerId).select('userId headline ghostMode hiddenCompanies'), EmployerProfile.findById(a.employerId).select('companyName monogram userId')]);
+      if (as === 'employer' && hiddenFromEmployer(s, e)) continue;
       const otherUserId = as === 'employer' ? s?.userId : e?.userId;
       const other = otherUserId ? await User.findById(otherUserId).select('name avatarUrl') : null;
       const last = await Message.findOne({ applicationId: a._id }).sort({ createdAt: -1 });

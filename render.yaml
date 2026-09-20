@@ -25,8 +25,9 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
+      # Demo accounts (public password) are never seeded in production unless SEED_DEMO_IN_PROD=true.
       - key: SEED_ON_START
-        value: "true"
+        value: "false"
       - key: SERVE_CLIENT
         value: "false"
       # Gemini budget — keep under your API key's free-tier limits (see server/.env.example)
@@ -36,7 +37,7 @@ services:
         value: "8"
       - key: AI_COOLDOWN_MINUTES
         value: "15"
-      # Password-reset email. Leave empty to print reset links to the Render logs instead.
+      # Password-reset email. REQUIRED in production: without SMTP the forgot-password endpoint answers 503.
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

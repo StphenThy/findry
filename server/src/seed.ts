@@ -7,6 +7,9 @@ import type { ApplicationStatus } from './types';
 
 export const DEMO_PASSWORD = 'password123';
 
+/** Every seeded account lives under the reserved `.demo` TLD, so they are easy to recognise (and to refuse in production). */
+export const isDemoEmail = (email: string) => /@[a-z0-9.-]+.demo$/i.test(email.trim());
+
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000);
 const daysAgo = (d: number) => hoursAgo(d * 24);
 const daysFromNow = (d: number) => new Date(Date.now() + d * 86_400_000);

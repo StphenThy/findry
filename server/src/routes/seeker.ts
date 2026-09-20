@@ -13,7 +13,8 @@ import { getAI } from '../services/ai';
 import { computeMatch } from '../services/matching/score';
 import { normalizeSkills } from '../services/matching/skills';
 import { ACCEPTED_MIME, extensionOk, extractText } from '../services/resume/extractText';
-import { jobView } from './helpers';
+import { escapeRegex, jobView } from './helpers';
+import { requireObjectId } from '../middleware/objectId';
 
 export const seekerRouter = Router();
 seekerRouter.use(requireAuth, requireRole('seeker'));
@@ -95,11 +96,12 @@ seekerRouter.post(
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded (field name must be "resume")' });
     const buffer = fs.readFileSync(file.path);
+    // The parsed text is what we keep (in MongoDB); the file itself is not served anywhere.
+    fs.unlink(file.path, () => {});
     let rawText: string;
     try {
       rawText = await extractText(buffer, file.mimetype, file.originalname);
     } catch (err) {
-      fs.unlink(file.path, () => {});
       return res.status(422).json({ error: (err as Error).message });
     }
     const ai = getAI();
@@ -142,10 +144,10 @@ seekerRouter.post(
 /* ── Matches / feed ──────────────────────────────────────────────────── */
 
 const feedQuery = z.object({
-  q: z.string().optional(),
-  location: z.string().optional(),
+  q: z.string().max(200).optional(),
+  location: z.string().max(120).optional(),
   workSetup: z.enum(['hybrid', 'remote', 'onsite']).optional(),
-  industry: z.string().optional(),
+  industry: z.string().max(80).optional(),
   salaryMin: z.coerce.number().optional(),
   sort: z.enum(['match', 'newest', 'salary']).default('match'),
   limit: z.coerce.number().min(1).max(100).default(30),
@@ -158,8 +160,8 @@ seekerRouter.get(
     const p = req.seeker!;
     const filter: Record<string, unknown> = { status: 'active' };
     if (q.workSetup) filter.workSetup = q.workSetup;
-    if (q.industry) filter.industry = new RegExp(q.industry, 'i');
-    if (q.location) filter.location = new RegExp(q.location, 'i');
+    if (q.industry) filter.industry = new RegExp(escapeRegex(q.industry), 'i');
+    if (q.location) filter.location = new RegExp(escapeRegex(q.location), 'i');
     if (q.salaryMin) filter.salaryMax = { $gte: q.salaryMin };
     if (q.q) filter.$text = { $search: q.q };
 
@@ -206,14 +208,15 @@ seekerRouter.get(
 
 seekerRouter.get(
   '/jobs/:id',
+  requireObjectId('id'),
   wrap(async (req, res) => {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: 'Job not found' });
     const job = await Job.findById(req.params.id);
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-    const employer = await EmployerProfile.findById(job.employerId);
     const p = req.seeker!;
-    await Job.updateOne({ _id: job._id }, { $inc: { views: 1 } });
-    const application = await Application.findOne({ jobId: job._id, seekerId: p._id });
+    const application = job ? await Application.findOne({ jobId: job._id, seekerId: p._id }) : null;
+    // Drafts and closed roles are private to the employer unless this seeker already applied.
+    if (!job || (job.status !== 'active' && !application)) return res.status(404).json({ error: 'Job not found' });
+    const employer = await EmployerProfile.findById(job.employerId);
+    if (job.status === 'active') await Job.updateOne({ _id: job._id }, { $inc: { views: 1 } });
 
     // "Similar jobs" carousel: same industry or overlapping required skills
     const others = await Job.find({ _id: { $ne: job._id }, status: 'active' }).limit(100);
@@ -245,9 +248,10 @@ seekerRouter.get(
 /** How to improve this match: AI (or local) advice for the missing skills. */
 seekerRouter.post(
   '/jobs/:id/gap-advice',
+  requireObjectId('id'),
   gapAdviceLimiter,
   wrap(async (req, res) => {
-    const job = await Job.findById(req.params.id);
+    const job = await Job.findOne({ _id: req.params.id, status: 'active' });
     if (!job) return res.status(404).json({ error: 'Job not found' });
     const p = req.seeker!;
     const match = computeMatch(p, job);
@@ -274,10 +278,11 @@ seekerRouter.get(
 
 seekerRouter.post(
   '/saved/:jobId',
+  requireObjectId('jobId'),
   wrap(async (req, res) => {
     const p = req.seeker!;
     const id = req.params.jobId;
-    if (!Types.ObjectId.isValid(id) || !(await Job.exists({ _id: id }))) return res.status(404).json({ error: 'Job not found' });
+    if (!(await Job.exists({ _id: id, status: 'active' }))) return res.status(404).json({ error: 'Job not found' });
     const has = p.savedJobs.some((s) => String(s) === id);
     if (has) p.savedJobs = p.savedJobs.filter((s) => String(s) !== id);
     else p.savedJobs.push(new Types.ObjectId(id));

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api, tokenStore } from './api';
+import { ApiError, api, tokenStore } from './api';
+import { toast } from './hooks';
 import type { AuthResponse, ProfileStatus, Role, User } from './types';
 
 interface AuthState {
@@ -39,18 +40,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    try {
-      const r = await api.get<{ user: User; profiles: ProfileStatus }>('/auth/me');
-      setUser(r.user);
-      setProfiles(r.profiles);
-    } catch {
-      tokenStore.clear();
-      setUser(null);
-      setProfiles(null);
-      setActiveRoleState(null);
-    } finally {
-      setLoading(false);
+    // Only a rejected token ends the session. A network blip, a 5xx, a
+    // rate-limit answer or a cold-starting server must not sign the user out,
+    // so those are retried a few times before giving up for this page load.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const r = await api.get<{ user: User; profiles: ProfileStatus }>('/auth/me');
+        setUser(r.user);
+        setProfiles(r.profiles);
+        break;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          tokenStore.clear();
+          setUser(null);
+          setProfiles(null);
+          setActiveRoleState(null);
+          break;
+        }
+        if (attempt >= 3) {
+          toast.error('Could not reach the Findry server. Check your connection and reload.');
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 4000 * attempt));
+      }
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => {

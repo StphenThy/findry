@@ -27,6 +27,8 @@ export interface IApplication extends Document<Types.ObjectId> {
   offerPerks?: string[];
   timeline: ITimelineEvent[];
   viewedAt?: Date;
+  /** Set when the candidate withdraws; the employer can no longer move the status. */
+  withdrawnAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -54,6 +56,7 @@ const ApplicationSchema = new Schema<IApplication>(
     offerPerks: { type: [String], default: [] },
     timeline: { type: [{ status: String, at: Date, note: String }], default: [] },
     viewedAt: Date,
+    withdrawnAt: Date,
   },
   { timestamps: true },
 );

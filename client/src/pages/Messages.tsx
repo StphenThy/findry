@@ -124,7 +124,8 @@ function Thread({ applicationId, role, accent, onSent }: { applicationId: string
     }
   };
 
-  if (error) return <ErrorBox message={error} onRetry={reload} />;
+  // A failed background poll must not wipe the thread (and the draft being typed) — only a failed first load does.
+  if (error && !data) return <ErrorBox message={error} onRetry={reload} />;
   if (loading && !data) return <Skeleton className="h-[60vh]" />;
   if (!data) return null;
   const title = role === 'seeker' ? data.counterpart.company : data.counterpart.name ?? 'Candidate';

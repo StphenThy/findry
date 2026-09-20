@@ -7,6 +7,7 @@ import { requireAuth, signToken, wrap } from '../middleware/auth';
 import { LOCKOUT, authLimiter, resetLimiter } from '../middleware/security';
 import { EmployerProfile, SeekerProfile, User } from '../models';
 import type { IUser } from '../models';
+import { isDemoEmail } from '../seed';
 import { mailConfigured, sendMail } from '../services/mail';
 import type { Role } from '../types';
 
@@ -21,6 +22,7 @@ export const passwordSchema = z
   .max(128)
   .refine((v) => /[A-Za-z]/.test(v) && /\d/.test(v), 'Password must contain at least one letter and one number');
 
+const escapeHtml = (v: string) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const sha256 = (v: string) => crypto.createHash('sha256').update(v).digest('hex');
 
 const signupSchema = z.object({
@@ -118,6 +120,8 @@ authRouter.post(
   authLimiter,
   wrap(async (req, res) => {
     const body = loginSchema.parse(req.body);
+    // The demo accounts' password is printed in this repo. They exist for local demos only.
+    if (isProd && isDemoEmail(body.email)) return res.status(403).json({ error: 'Demo accounts are disabled on the live site. Create your own account to continue.', code: 'DEMO_DISABLED' });
     const user = await User.findOne({ email: body.email });
 
     // Account lockout: after LOCKOUT.maxFailures wrong passwords the account pauses for LOCKOUT.minutes.
@@ -168,6 +172,10 @@ authRouter.post(
   resetLimiter,
   wrap(async (req, res) => {
     const { email } = z.object({ email: z.string().trim().email() }).parse(req.body);
+    if (isProd && !mailConfigured) {
+      console.error('[auth] forgot-password called but SMTP is not configured — set SMTP_HOST/SMTP_USER/SMTP_PASS');
+      return res.status(503).json({ error: 'Password reset email is temporarily unavailable. Please contact support.', code: 'MAIL_UNAVAILABLE' });
+    }
     const user = await User.findOne({ email });
     let devResetUrl: string | undefined;
     if (user) {
@@ -181,7 +189,7 @@ authRouter.post(
         user.email,
         'Reset your Findry password',
         `Hi ${user.name},\n\nSomeone asked to reset the password for your Findry account. If that was you, open this link within the next hour:\n\n${url}\n\nIf you didn't request this, you can ignore this email — your password won't change.`,
-        `<p>Hi ${user.name},</p><p>Someone asked to reset the password for your Findry account. If that was you, click the link below within the next hour:</p><p><a href="${url}">Reset my password</a></p><p>If you didn't request this, you can ignore this email — your password won't change.</p>`,
+        `<p>Hi ${escapeHtml(user.name)},</p><p>Someone asked to reset the password for your Findry account. If that was you, click the link below within the next hour:</p><p><a href="${url}">Reset my password</a></p><p>If you didn't request this, you can ignore this email — your password won't change.</p>`,
       );
       if (!mailConfigured && !isProd) devResetUrl = url;
     }

@@ -15,6 +15,7 @@ import { messagesRouter } from './routes/messages';
 import { seekerRouter } from './routes/seeker';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, seed } from './seed';
 import { getAI } from './services/ai';
+import { mailConfigured } from './services/mail';
 import { aiUsageStatus } from './services/ai/guard';
 
 export function createApp() {
@@ -36,7 +37,7 @@ export function createApp() {
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/api/health', async (_req, res) =>
-    res.json({ ok: true, env: config.nodeEnv, ai: getAI().name, aiUsage: await aiUsageStatus(), db: config.mongoUri ? 'atlas' : 'memory', time: new Date().toISOString() }),
+    res.json(isProd ? { ok: true, time: new Date().toISOString() } : { ok: true, env: config.nodeEnv, ai: getAI().name, aiUsage: await aiUsageStatus(), db: config.mongoUri ? 'atlas' : 'memory', time: new Date().toISOString() }),
   );
   if (!isProd) app.get('/api/demo-accounts', (_req, res) => res.json({ password: DEMO_PASSWORD, accounts: DEMO_ACCOUNTS }));
 
@@ -62,7 +63,9 @@ export function createApp() {
     if (err instanceof ZodError) {
       return res.status(400).json({ error: 'Invalid input', details: err.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
-    const e = err as { name?: string; message?: string; code?: string | number; status?: number };
+    const e = err as { name?: string; message?: string; code?: string | number; status?: number; type?: string };
+    if (e.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON body' });
+    if (e.type === 'entity.too.large') return res.status(413).json({ error: 'Request body is too large' });
     if (e.name === 'MulterError' || /resumes are accepted/.test(e.message ?? '')) return res.status(400).json({ error: e.message });
     if (e.code === 11000) return res.status(409).json({ error: 'Already exists' });
     if (e.message?.startsWith('Origin ')) return res.status(403).json({ error: e.message });
@@ -75,7 +78,9 @@ export function createApp() {
 
 async function main() {
   const { inMemory } = await connectDB();
-  if (config.seedOnStart) {
+  // Demo data (and its public password) is for local demos. In production it is only
+  // loaded when SEED_DEMO_IN_PROD=true is set on purpose.
+  if (config.seedOnStart && (!isProd || process.env.SEED_DEMO_IN_PROD === 'true')) {
     const r = await seed();
     if (!r.skipped) {
       console.log(`[seed] demo data loaded (password: ${DEMO_PASSWORD})`);
@@ -83,11 +88,16 @@ async function main() {
     }
   }
   getAI();
+  if (isProd && !mailConfigured) console.warn('[mail] SMTP is not configured — password reset will answer 503 until SMTP_HOST/SMTP_USER/SMTP_PASS are set');
   const app = createApp();
   app.listen(config.port, () => {
     console.log(`[web] Findry API listening on http://localhost:${config.port}  (db: ${inMemory ? 'in-memory' : 'mongodb'})`);
   });
 }
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[fatal] unhandled promise rejection:', reason);
+});
 
 if (require.main === module) {
   main().catch((err) => {

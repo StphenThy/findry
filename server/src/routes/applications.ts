@@ -7,7 +7,8 @@ import type { IApplication, IEmployerProfile, IJob, ISeekerProfile } from '../mo
 import { computeMatch } from '../services/matching/score';
 import { APPLICATION_STATUSES } from '../types';
 import type { ApplicationStatus } from '../types';
-import { employerSummary } from './helpers';
+import { employerSummary, hiddenFromEmployer } from './helpers';
+import { requireObjectId } from '../middleware/objectId';
 
 export const applicationsRouter = Router();
 applicationsRouter.use(requireAuth);
@@ -80,6 +81,7 @@ function appView(a: IApplication) {
     offerPerks: a.offerPerks,
     timeline: a.timeline,
     viewedAt: a.viewedAt,
+    withdrawnAt: a.withdrawnAt,
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
   };
@@ -162,7 +164,7 @@ applicationsRouter.get(
     for (const a of apps) {
       const s = sm.get(String(a.seekerId));
       // Ghost mode: hide candidates from companies they've blocked (privacy isolation)
-      if (s?.ghostMode && s.hiddenCompanies.some((c) => c.toLowerCase() === e.companyName.toLowerCase())) continue;
+      if (hiddenFromEmployer(s, e)) continue;
       list.push({ ...appView(a), candidate: await candidateSummary(s), job: jm.get(String(a.jobId)) ? { id: String(a.jobId), title: jm.get(String(a.jobId))!.title } : null });
     }
     res.json({ applications: list, jobs: jobs.map((j) => ({ id: String(j._id), title: j.title })) });
@@ -173,8 +175,8 @@ applicationsRouter.get(
 
 applicationsRouter.get(
   '/:id',
+  requireObjectId('id'),
   wrap(async (req, res) => {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: 'Not found' });
     const a = await Application.findById(req.params.id);
     if (!a) return res.status(404).json({ error: 'Not found' });
     const user = req.user!;
@@ -186,6 +188,8 @@ applicationsRouter.get(
     const isSeeker = seeker && String(seeker.userId) === String(user._id);
     const isEmployer = employer && String(employer.userId) === String(user._id);
     if (!isSeeker && !isEmployer) return res.status(403).json({ error: 'Not your application' });
+    // Ghost mode: the dossier is invisible to a company the seeker has hidden from.
+    if (isEmployer && !isSeeker && hiddenFromEmployer(seeker, employer)) return res.status(404).json({ error: 'Not found' });
 
     // Employer opening the dossier = "viewed" (seeker sees the reading receipt)
     if (isEmployer && a.status === 'submitted') {
@@ -220,11 +224,15 @@ const statusSchema = z.object({
 
 applicationsRouter.patch(
   '/:id/status',
+  requireObjectId('id'),
   requireRole('employer'),
   wrap(async (req, res) => {
     const body = statusSchema.parse(req.body);
     const a = await Application.findOne({ _id: req.params.id, employerId: req.employer!._id });
     if (!a) return res.status(404).json({ error: 'Not found' });
+    if (a.withdrawnAt) return res.status(409).json({ error: 'The candidate withdrew this application; its status can no longer change.', code: 'WITHDRAWN' });
+    const seeker = await SeekerProfile.findById(a.seekerId);
+    if (hiddenFromEmployer(seeker, req.employer)) return res.status(404).json({ error: 'Not found' });
     a.status = body.status;
     if (body.note) a.employerNote = body.note;
     if (body.interviewAt) a.interviewAt = new Date(body.interviewAt);
@@ -250,11 +258,14 @@ applicationsRouter.patch(
 
 applicationsRouter.post(
   '/:id/withdraw',
+  requireObjectId('id'),
   requireRole('seeker'),
   wrap(async (req, res) => {
     const a = await Application.findOne({ _id: req.params.id, seekerId: req.seeker!._id });
     if (!a) return res.status(404).json({ error: 'Not found' });
+    if (a.withdrawnAt) return res.json({ application: appView(a) });
     a.status = 'rejected';
+    a.withdrawnAt = new Date();
     a.timeline.push({ status: 'rejected', at: new Date(), note: 'Withdrawn by candidate' });
     await a.save();
     res.json({ application: appView(a) });

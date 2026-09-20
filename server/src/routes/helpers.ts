@@ -40,3 +40,16 @@ export function jobView(job: IJob, employer: IEmployerProfile | null | undefined
 }
 
 export const daysAgo = (d: Date) => Math.floor((Date.now() - d.getTime()) / 86_400_000);
+
+/** Escape user text before it goes into a RegExp (search filters). */
+export const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Ghost mode: a seeker who hid a company must be invisible to that company
+ * everywhere — pipeline, dossier, conversations and messaging alike.
+ */
+export function hiddenFromEmployer(seeker: Pick<ISeekerProfile, 'ghostMode' | 'hiddenCompanies'> | null | undefined, employer: Pick<IEmployerProfile, 'companyName'> | null | undefined): boolean {
+  if (!seeker?.ghostMode || !employer?.companyName) return false;
+  const company = employer.companyName.trim().toLowerCase();
+  return seeker.hiddenCompanies.some((c) => c.trim().toLowerCase() === company);
+}

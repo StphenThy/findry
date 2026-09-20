@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Skeleton, Toaster } from './components/ui';
@@ -11,6 +11,10 @@ import { ForgotPassword, ResetPassword, Signup } from './pages/public/Auth';
 import { AccountSettings } from './pages/Account';
 import { Login } from './pages/public/Login';
 import { Landing } from './pages/public/Landing';
+import { PrivacyPolicy, TermsOfService } from './pages/public/Legal';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { setSlowRequestHandler } from './lib/api';
+import { toast } from './lib/hooks';
 
 // Seeker
 const SeekerOnboarding = lazy(() => import('./pages/seeker/Onboarding').then((m) => ({ default: m.SeekerOnboarding })));
@@ -59,7 +63,11 @@ function RequireRole({ role, children }: { role: Role; children: ReactNode }) {
 }
 
 export default function App() {
+  useEffect(() => {
+    setSlowRequestHandler(() => toast.show('The server is waking up — the first request can take up to a minute.', 'info'));
+  }, []);
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <BrowserRouter>
         <Suspense fallback={<Loading />}>
@@ -69,6 +77,8 @@ export default function App() {
             <Route path="/signup" element={<Signup />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
 
             <Route
               path="/seeker"
@@ -120,5 +130,6 @@ export default function App() {
         <Toaster />
       </BrowserRouter>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }

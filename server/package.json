@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
     "migrate:one-role": "tsx src/scripts/one-role.ts",
+    "purge-demo": "tsx src/scripts/purge-demo.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
